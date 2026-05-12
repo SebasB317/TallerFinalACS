@@ -1,0 +1,13 @@
+# Versiones flexibles para permitir ruedas precompiladas (p. ej. Python 3.14).
+# Si pip sigue compilando, usar Python 3.11 o 3.12 recomendado en DOCUMENTO_GENERAL.md
+fastapi>=0.115.6
+uvicorn[standard]>=0.32.1
+sqlalchemy>=2.0.36
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.0.0
+pydantic>=2.11.0
+email-validator>=2.0.0
+pydantic-settings>=2.6.1
+python-multipart>=0.0.17
+pytest>=8.3.4
+httpx>=0.28.1

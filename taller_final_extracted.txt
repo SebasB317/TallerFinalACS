@@ -1,0 +1,357 @@
+Objetivo General 
+Diseñar e implementar un sistema distribuido concurrente que procese tareas en  segundo plano garantizando consistencia, escalabilidad y desacoplamiento  arquitectónico. 
+Objetivos Específicos 
+• Implementar autenticación segura con JWT  
+• Diseñar un sistema productor-consumidor  
+• Procesar tareas concurrentemente con workers  
+• Gestionar estados de trabajos (jobs)  
+• Implementar notificaciones asíncronas  
+• Controlar concurrencia (cancelación, prioridad)  
+• Monitorear métricas del sistema 
+Competencias a Desarrollar 
+• Diseño de sistemas cliente-servidor  
+• Implementación de API REST profesional  
+• Aplicación de Arquitectura Limpia  
+• Uso de patrones de diseño en contexto real  
+• Manejo de concurrencia (locks, eventos, colas)  
+• Diseño de sistemas escalables  
+• Pensamiento de dominio (DDD básico) 
+Arquitectura General 
+Estilo 
+Clean Architecture (Arquitectura Limpia) 
+Capas 
+Domain 
+• Entidades: User, Job, TextResult  
+• Value Objects: Email, Password  
+• Interfaces: Repositories  
+• Eventos: JobCompletedEvent  
+  
+Application 
+• AuthService  
+• JobService 
+
+
+• ProcessTextService  
+• ReportService  
+• NotificationService  
+  
+Infrastructure 
+• SQL (persistencia)  
+• WorkerPool (threads/procesos)  
+• Queue (cola de trabajos)  
+• WebSocketManager  
+• MetricsCollector  
+  
+Presentation 
+• FastAPI endpoints  
+• WebSocket  
+• DTOs / Schemas 
+Modelo de Concurrencia 
+Estrategia 
+• multiprocessing → CPU-bound (análisis)  
+• threading → I/O (API, WebSocket)  
+Primitivas usadas 
+• Lock / RLock  
+• Event  
+• Queue / PriorityQueue  
+• Semaphore 
+Historias de Usuario (Estructuradas) 
+Historia #1: Gestión de usuarios y autenticación 
+Objetivo del punto: 
+Establecer un sistema básico de identidad y seguridad para que solo clientes  autorizados puedan consumir la API. 
+Competencias: 
+• Implementar autenticación stateless (JWT) en una API REST. • Aislar el acceso a la base de datos. 
+• Manejar el ciclo de vida de contraseñas (hashing).
+
+
+
+Historia de usuario: 
+Yo como analista de datos necesito registrar una cuenta e iniciar sesión para obtener  un token de acceso que me permita enviar textos para análisis y consultar mis  resultados, de modo que ningún otro usuario pueda ver mi información. 
+Reglas de negocio (DDD): 
+• Un Usuario se identifica por su email (único). 
+• La contraseña debe tener al menos 8 caracteres, una mayúscula y un  número. 
+• El token JWT expira después de 24 horas. 
+Casos de uso: 
+1. Registro de nuevo usuario 
+2. Autenticación (login) 
+3. Verificación de token en cada petición protegida 
+Arquitectura (justificación): 
+Se usa Arquitectura Limpia con capas: 
+• Dominio: entidad User, ValueObject Email, Password (hashed). • Aplicación: servicios AuthService, JwtService. 
+• Infraestructura: UserRepository con SQLAlchemy, BcryptHasher. • Presentación: endpoints /register, /login, dependencia inyectada. 
+Patrones (justificación técnica): 
+• Repository: abstrae el almacenamiento, permite cambiar fácilmente de base  de datos. 
+• Factory (para crear User): encapsula la lógica de validación de contraseña y  email. 
+• Strategy (para hashing): permite cambiar algoritmo de hash sin modificar el  dominio. 
+Concurrencia (threads/procesos): 
+No aplica directamente en esta historia, pero el AuthService debe ser thread safe porque múltiples solicitudes de login podrían llegar simultáneamente. Se  usa RLock si se necesita proteger alguna caché interna. 
+Criterios de aceptación: 
+• /register recibe JSON {email, password} y retorna 201 con ID de usuario. • /login recibe credenciales y retorna JWT. 
+• Endpoints protegidos (ej. /analyze) rechazan peticiones sin token o con token  inválido. 
+• El password no se almacena en texto plano.
+
+
+Actividades del estudiante: 
+1. Definir entidades y value objects en la capa de dominio. 
+2. Implementar el repositorio en memoria (para pruebas) y luego con  persistencia. 
+3. Crear los endpoints con FastAPI y middleware de autenticación. 4. Escribir pruebas unitarias del AuthService. 
+Historia #2: Envío de tareas de análisis (modelo productor-consumidor) 
+Objetivo del punto: 
+Permitir que un cliente autenticado envíe un lote de textos para análisis y que el  servidor los encola para procesamiento concurrente. 
+Competencias: 
+• Implementar el patrón Productor-Consumidor con una cola thread-safe. • Manejar la sincronización entre hilos productores (API) y consumidores  (workers). 
+• Diseñar una API asíncrona (devolver un job_id). 
+Historia de usuario: 
+Yo como analista necesito enviar un lote de hasta 100 textos a la vez y recibir  inmediatamente un identificador de trabajo, para que el sistema procese los textos en  segundo plano y yo pueda consultar el progreso más tarde. 
+Reglas de negocio (DDD): 
+• Cada Job contiene un job_id único, user_id, estado (pending, processing, completed, failed), lista de Textos. 
+• Un Texto tiene contenido, idioma detectado (opcional) y resultado posterior  (sentimiento). 
+• El tamaño máximo del lote es 100 textos; si se excede, se rechaza. 
+Casos de uso: 
+1. Crear un nuevo trabajo (CreateJob). 
+2. Encolar los textos para análisis. 
+Arquitectura (justificación): 
+Capa de aplicación: JobService que recibe DTO, crea la entidad Job y la guarda  vía JobRepository. Luego publica el trabajo en una cola en memoria (queue.Queue)  que es compartida con los workers. La API retorna 202 Accepted con el job_id. 
+Patrones (justificación técnica): 
+• Producer-Consumer: El endpoint productor introduce tareas en la cola; los  workers (threads/processes) consumen. Es el patrón clásico para desacoplar 
+
+
+la velocidad de llegada de solicitudes de la velocidad de procesamiento. • Command (cada TextAnalysisCommand): encapsula la solicitud de análisis de  un texto. 
+• Repository para Job y TextResult. 
+Concurrencia (threads/procesos): 
+• La cola queue.Queue es thread-safe por sí misma.  
+• Se lanzarán N workers (hilos o procesos) al iniciar el servidor, que permanecen a la espera de textos. 
+• Se usará un threading.Event para señalar el cierre ordenado. • Justificación de hilos vs procesos: Los textos son cortos y la operación de  análisis (simulada con NLP liviano) puede ser CPU-bound; pero para simplificar  la gestión de estado compartido, se recomienda usar procesos con multiprocessing. Queue para evitar el GIL y lograr verdadero paralelismo.  Sin embargo, la comunicación con la base de datos compartida requiere  cuidado (cada proceso tiene su propia conexión).  
+Alternativa: usar ThreadPoolExecutor si la tarea es mayormente I/O (llamadas  a APIs externas). El estudiante debe justificar su elección. 
+Criterios de aceptación: 
+• POST /jobs con JSON {texts: ["texto1", ...]} retorna {job_id, status: "pending"}. • La respuesta es inmediata (< 100ms). 
+• El trabajo aparece en la cola y los workers comienzan a procesarlo sin bloquear  nuevas peticiones. 
+Actividades del estudiante: 
+1. Implementar Job y Text como agregados. 
+2. Crear la cola global y el WorkerPool (inicialización al arranque). 3. Escribir el endpoint que valida el tamaño del lote, guarda el job y lo encola. 4. Implementar el productor que toma cada texto del lote y lo mete en la cola. 
+Historia #3: Procesamiento concurrente con Workers (análisis de sentimiento) 
+Objetivo del punto: 
+Implementar un conjunto de workers que consumen textos de la cola, realizan el  análisis (simulado o real) y actualizan los resultados en la base de datos, respetando  condiciones de carrera. 
+Competencias: 
+• Manejar sincronización para actualizar el estado de un trabajo compartido (ej.  contador de textos procesados).
+
+• Usar locks o semáforos para proteger secciones críticas. 
+• Implementar el patrón Thread Pool / Process Pool. 
+Historia de usuario: 
+Yo como analista necesito que el sistema procese los textos de manera rápida y  confiable, usando múltiples workers en paralelo, para obtener los resultados en el  menor tiempo posible sin perder ningún texto. 
+Reglas de negocio (DDD): 
+• Cada worker procesa un texto a la vez. 
+• El análisis asigna una etiqueta: POSITIVE, NEGATIVE, NEUTRAL y  un score entre -1.0 y 1.0. 
+• Si un texto falla (timeout, error), se marca como failed y se sigue con el  siguiente. 
+• El trabajo (Job) se considera completed cuando todos sus textos han sido  procesados (éxito o fallo). 
+Casos de uso: 
+1. Consumir un texto de la cola. 
+2. Ejecutar el análisis (simulación con time.sleep aleatorio más una función de  puntuación). 
+3. Actualizar el texto en la base de datos y decrementar un contador atómico de  textos pendientes. 
+Arquitectura (justificación): 
+Los workers son parte de la infraestructura (WorkerManager). Se comunican con el  dominio a través de un servicio de aplicación (ProcessTextService). Para evitar  condiciones de carrera al actualizar el Job (por ejemplo, saber cuándo el último texto  termina para cambiar estado a completed), se utiliza un contador atómico con 
+threading.Lock o un mecanismo transaccional en BD. 
+Patrones (justificación técnica): 
+• Worker Pool: Reutiliza un conjunto fijo de hilos/procesos para evitar el costo de  crearlos por cada tarea. 
+• Observer (opcional): El Job podría notificar a un servicio de completitud cuando  el contador llegue a cero. 
+• Singleton (para la cola y el pool): Garantiza que todos los workers accedan a la  misma cola. 
+Concurrencia (threads/procesos): 
+• Se usará multiprocessing.Pool o concurrent.futures.ProcessPoolExecutor para  lograr paralelismo real en CPU. 
+• Sincronización para contador de textos restantes: cada worker necesita  actualizar el contador del Job. Se puede hacer con threading.Lock si los 
+
+workers son hilos; con procesos, se requiere un mecanismo  como multiprocessing.Value o delegar la actualización a un único hilo  supervisor. 
+• Solución recomendada: Cada worker actualiza directamente la base de datos  (incrementa processed_count) y al final se consulta si processed_count ==  total_texts para marcar el Job como completado. La condición de carrera (dos  workers actualizando el contador casi al mismo tiempo) se resuelve con una  transacción ACID en la BD o con un SELECT FOR UPDATE. 
+Criterios de aceptación: 
+• Al menos 4 workers procesan concurrentemente. 
+• El tiempo total de procesamiento de un lote de 100 textos con análisis simulado  de 50ms cada uno es aproximadamente (100 * 0.05)/N segundos. • El estado del trabajo se actualiza correctamente sin quedar en processing después de terminar todos los textos. 
+• No se pierden textos ni se procesan dos veces. 
+Actividades del estudiante: 
+1. Implementar la clase Worker (hilo o proceso) que toma tareas de la cola. 2. Crear el WorkerPool que inicia N workers. 
+3. Implementar la función de análisis (puede ser un stub: dividir el texto en  palabras, contar positivas/negativas). 
+4. Manejar la actualización atómica del contador de textos procesados en la BD. Historia #4: Consulta de resultados y generación de reportes 
+Objetivo del punto: 
+Proveer endpoints para que el cliente pueda consultar el estado de un trabajo y los  resultados detallados (por texto o agregados). 
+Competencias: 
+• Aplicar el patrón DTO (Data Transfer Object) y Mapper para separar la representación de la API de las entidades de dominio. 
+• Implementar consultas eficientes (índices, paginación). 
+• Usar caché bajo demanda para evitar recomputar reportes agregados. 
+Historia de usuario: 
+Yo como analista necesito consultar el estado de un trabajo mediante su job_id y,  cuando esté completado, obtener un resumen (total positivos, negativos, neutrales) y  la lista paginada de textos con su sentimiento, para evaluar rápidamente la opinión  general.
+Reglas de negocio (DDD): 
+• Un reporte agregado es inmutable. 
+• Se puede solicitar paginación (page, per_page). 
+• Si el trabajo aún está en processing, se retorna status: "processing" junto con  el número de textos procesados / total. 
+Casos de uso: 
+1. Obtener estado y progreso de un trabajo. 
+2. Obtener resultados detallados (texto + sentimiento) paginados. 3. Obtener reporte agregado (counts, promedio de score). 
+Arquitectura (justificación): 
+Capa de aplicación: JobQueryService utiliza JobRepository y TextResultRepository.  Para reportes agregados se puede usar un materialized view o calcular sobre la  marcha (se justifica si la cantidad de textos por trabajo no supera los 10k). Se  implementa caché con functools.lru_cache o Redis para reportes de trabajos  completados que no cambian. 
+Patrones (justificación técnica): 
+• Query Object: encapsula la lógica de paginación y filtros. 
+• DTO (JobStatusDTO, ReportDTO) : evita exponer las entidades de dominio  directamente en la API. 
+• Repository (ya mencionado) para aislar las consultas a la BD. 
+Concurrencia (threads/procesos): 
+Los endpoints de consulta son de solo lectura, por lo que se pueden manejar en el  mismo hilo del servidor web sin necesidad de crear workers adicionales. Pero si se  usan múltiples workers, cada solicitud corre en un hilo distinto; eso está bien porque  las consultas son independientes. Se debe garantizar que la conexión a la BD sea  thread-safe (SQLAlchemy con scoped session). 
+Criterios de aceptación: 
+• GET /jobs/{job_id} retorna estado y progreso. 
+• GET /jobs/{job_id}/results?page=1&per_page=20 retorna lista de textos con  sentimiento. 
+• GET /jobs/{job_id}/report retorna {positive_count, negative_count,  neutral_count, average_score}. 
+• Los tiempos de respuesta para consultas son < 200ms. 
+Actividades del estudiante: 
+1. Crear los DTOs y mapeadores. 
+2. Implementar los endpoints de consulta en la capa de presentación. 3. Optimizar consultas con índices en la base de datos (campo job_id, status). 4. Agregar caché para reportes de trabajos completados.
+
+Historia #5: Notificación asíncrona por WebSocket o callback 
+Objetivo del punto: 
+Notificar al cliente cuando un trabajo ha finalizado, sin necesidad de polling constante. 
+Competencias: 
+• Implementar comunicaciones en tiempo real (WebSockets) o callbacks HTTP. • Manejar concurrencia en el registro de suscriptores. 
+• Aplicar el patrón Observer a nivel de sistema. 
+Historia de usuario: 
+Yo como analista quiero recibir una notificación automática (por WebSocket o un  webhook) cuando mi trabajo termine, para no tener que consultar repetidamente el  estado y poder reaccionar inmediatamente. 
+Reglas de negocio (DDD): 
+• Cada usuario puede tener un endpoint de callback configurado (opcional) o una  conexión WebSocket activa. 
+• La notificación debe contener el job_id y la URL para consultar los resultados. • Si falla el callback, se reintenta hasta 3 veces con backoff. 
+Casos de uso: 
+1. Registrar una conexión WebSocket. 
+2. Enviar notificación a todos los clientes interesados cuando un trabajo cambie  a completed. 
+Arquitectura (justificación): 
+Se añade un servicio de notificaciones (NotificationService) desacoplado del  procesamiento. Los workers, al completar un trabajo, publican un evento de  dominio JobCompletedEvent. Un manejador de eventos (parte de la capa de  aplicación) escucha y envía la notificación vía WebSocket o HTTP. 
+Patrones (justificación técnica): 
+• Observer/Event-Driven: el evento JobCompleted es observado por el NotificationHandler. Esto desacopla el procesamiento de la notificación. • Singleton para el WebSocketManager (mantiene conexiones activas). • Circuit Breaker para los callbacks externos (evita sobrecargar si el destino  falla). 
+Concurrencia (threads/procesos): 
+• El WebSocketManager debe manejar múltiples conexiones concurrentemente;  se usa un diccionario con threading.Lock para agregar/remover clientes.
+
+• El envío de notificaciones desde los workers (que pueden ser procesos) hacia  el WebSocketManager requiere comunicación entre procesos. Una solución es  usar una cola de mensajes interna (ej. multiprocessing.Queue) o delegar el  envío a un thread dedicado. El estudiante debe proponer un mecanismo. 
+Criterios de aceptación: 
+• Un cliente puede conectarse a ws y recibirá un mensaje cuando su trabajo  termine. 
+• Opcional: el cliente puede registrar un callback via POST /webhooks. • La notificación se dispara exactamente una vez por trabajo. 
+Actividades del estudiante: 
+1. Implementar WebSocket (dependencia websockets). 
+2. Crear un EventBus simple (pub/sub en memoria). 
+3. Modificar los workers para que disparen JobCompletedEvent. 4. Implementar el handler que envía la notificación. 
+Historia #6: Cancelación y priorización de tareas (concurrency control avanzado) 
+Objetivo del punto: 
+Permitir que un cliente cancele un trabajo pendiente o en ejecución, y que se puedan  priorizar trabajos de usuarios premium. 
+Competencias: 
+• Gestionar el ciclo de vida de tareas concurrentes (cancelación segura). • Implementar una cola con prioridad (queue.PriorityQueue). 
+• Usar eventos (threading.Event) para señalar a los workers que una tarea ha  sido cancelada. 
+Historia de usuario: 
+Yo como cliente premium necesito poder cancelar un trabajo que ya no me interesa  (si aún no ha completado su procesamiento), y que mis trabajos tengan mayor  prioridad que los de usuarios gratuitos, para controlar mejor mis recursos y costos. 
+Reglas de negocio (DDD): 
+• Solo el propietario del trabajo puede cancelarlo. 
+• No se puede cancelar un trabajo ya completado. 
+• Los trabajos de usuarios premium tienen prioridad sobre los gratuitos (menor  número = mayor prioridad). 
+• Si un trabajo está siendo procesado activamente, la cancelación debe intentar  interrumpir el worker (usando threading.Event o similar).
+
+Casos de uso: 
+1. Cancelar un trabajo pendiente (aún en cola). 
+2. Cancelar un trabajo en ejecución (señal al worker). 
+3. Encolar trabajos con prioridad dinámica. 
+Arquitectura (justificación): 
+Se extiende la cola de trabajos para que sea de prioridad (PriorityQueue). Cada  elemento es una tupla (prioridad, timestamp, trabajo). Los workers toman de esa cola.  La cancelación se implementa marcando el trabajo como cancelled en la BD y, si está  en cola, se ignora al sacarlo; si está en ejecución, el worker debe revisar  periódicamente un flag de cancelación. 
+Patrones (justificación técnica): 
+• Priority Queue Pattern: para manejar la prioridad. 
+• Command with cancellation token: similar a CancellationToken en C#, se pasa  un threading.Event al worker que verifica antes de cada operación larga. 
+Concurrencia (threads/procesos): 
+• La cola PriorityQueue es thread-safe. 
+• Para la cancelación de un trabajo en ejecución, el worker debe tener accesso  a un Event asociado al trabajo. Como los workers son procesos, se necesitaría  un multiprocessing.Event; pero esto no es trivial. Alternativa simplificada: no se  permite cancelar trabajos ya iniciados (solo pendientes) - nivel medio. Para  nivel avanzado: usar multiprocessing.Process.terminate() (peligroso) o usar un  mecanismo cooperativo donde el worker consulte frecuentemente un flag en la  BD. 
+Criterios de aceptación: 
+• DELETE /jobs/{job_id} retorna 200 si se cancela exitosamente. • Los trabajos premium se procesan antes que los gratuitos. 
+• Un trabajo cancelado no debe ser procesado. 
+Actividades del estudiante: 
+1. Modificar la cola para que soporte prioridad. 
+2. Agregar el campo priority al Job. 
+3. Implementar el endpoint de cancelación. 
+4. En los workers, antes de iniciar el análisis de un texto, verificar si el trabajo ha  sido cancelado (revisando una caché de trabajos cancelados). 
+Historia #7: Dashboard administrativo con métricas de concurrencia 
+Objetivo del punto: 
+Proveer una interfaz (o endpoint) para que un administrador monitoree el rendimiento  del sistema: número de workers activos, tamaño de la cola, tiempos medios de 
+
+procesamiento, etc. 
+Competencias: 
+• Recolectar métricas en un entorno multihilo. 
+• Exponer información de estado interno de forma segura. 
+• Aplicar el patrón Singleton para un registro central de métricas. 
+Historia de usuario: 
+Yo como administrador del sistema necesito acceder a un endpoint/metrics que  muestre en tiempo real la salud del cluster de procesamiento (cola llena, workers  ocupados, tasa de procesamiento), para poder escalar horizontalmente o detectar  cuellos de botella. 
+Reglas de negocio (DDD): 
+• Las métricas son solo de consulta, no modifican el dominio. 
+• Se debe proteger el acceso con rol de administrador. 
+• Las métricas incluyen: tamaño actual de cola, número de trabajos completados  por minuto, tiempo promedio de procesamiento por texto, número de workers  activos. 
+Casos de uso: 
+1. Obtener métricas en tiempo real. 
+Arquitectura (justificación): 
+Se crea un servicio MetricsCollector (singleton) que es actualizado por los workers  cada vez que terminan una tarea (usando una cola de eventos o directamente con  locks). Se expone un endpoint en la capa de presentación. 
+Patrones (justificación técnica): 
+• Singleton: única instancia del recolector de métricas. 
+• Observer inverso: los workers reportan su estado al colector. 
+• Snapshot Pattern: se captura un instante consistente de las métricas. 
+Concurrencia (threads/procesos): 
+• El MetricsCollector debe ser thread-safe. Si los workers son procesos, se  puede utilizar multiprocessing.Manager para crear un diccionario compartido, o  enviar mensajes a través de una cola a un proceso dedicado que actualice las  métricas. 
+• Para el tiempo promedio, se usa un promedio móvil atómico (con lock). 
+Criterios de aceptación: 
+• GET /admin/metrics (autenticado como admin) retorna JSON con las métricas. • Las métricas reflejan el estado actual con un retraso máximo de 5 segundos. • El sistema no se degrada por la recolección de métricas.
+Actividades del estudiante: 
+1. Implementar MetricsCollector con métodos thread-safe. 
+2. Modificar los workers para notificar al colector al iniciar/finalizar un texto. 3. Crear el endpoint /admin/metrics. 
+4. Probar con carga simulada y verificar la precisión de las métricas. Historia #8: Plataforma LMS 
+Contexto: 
+Los estudiantes envían tareas a través de una API REST (simulada con hilos clientes).  El servidor LMS recibe las entregas y las encola para que profesores virtuales  (workers) las corrijan concurrentemente. 
+Requisitos: 
+• Una cola thread-safe (queue.Queue) con capacidad máxima de 10 tareas. • N=3 workers (hilos) que consumen tareas, cada un tarda time.sleep(random.uniform(0.5, 2)). 
+• El productor (simular 15 estudiantes) no debe bloquearse si la cola está llena:  debe esperar (uso de put con bloqueo). 
+• Cada tarea contiene: student_id, course_id, assignment_id, answer_text. • Al finalizar la corrección, el worker almacena la nota (simulada aleatoria entre  0 y 100). 
+Tareas a implementar: 
+1. Extienda GradeRepository con un threading.Lock o RLock. 
+2. Implemente la clase AssignmentWorker (hereda de threading.Thread) que  toma tareas de la cola. 
+3. En el main, cree los workers, inicie los productores y espere a que terminen  todas las entregas. 
+Contexto: 
+El sistema permite que múltiples estudiantes consulten sus notas (lectores) y  que profesores actualicen notas (escritores). Se debe permitir lectura concurrente,  pero exclusión mutua para escritura. Adicionalmente, no se permite escribir mientras  haya lectores activos. 
+Requisitos: 
+• Implemente un control de acceso usando threading.Semaphore o Condition con prioridad a escritores (para evitar inanición de escritores). 
+• Escriba un programa de prueba con 10 lectores (estudiantes) y 2 escritores  (profesores) accediendo al GradeRepository mejorado. 
+• Cada lector lee una nota aleatoria 5 veces; cada escritor actualiza una nota 3  veces. 
+• Muestre en consola cuándo un lector comienza/termina de leer y cuándo un 
+escritor escribe. 
+Tareas: 
+1. Cree una clase ReadWriteLock con métodos acquire_read, release_read, acquire_write, release_write. 
+2. Modifique el GradeRepository para que use este lock. 
+3. Genere estadísticas: tiempo total de ejecución, número de escritores que no  sufrieron inanición. 
+Contexto: 
+Un profesor desea que todos los estudiantes de un curso comiencen un examen al  mismo tiempo. Cada estudiante (hilo) se conecta a la plataforma en momentos  distintos, pero una vez que todos los 5 estudiantes están listos, el examen comienza  simultáneamente. 
+Requisitos: 
+• Use threading.Barrier con N=5. 
+• Cada estudiante imprime "Estudiante X está listo", llama a barrier.wait(), luego  imprime "Estudiante X comienza el examen". 
+• Simule la llegada escalonada con time.sleep aleatorio. 
+Historia #9: Pagos internacionales 
+Contexto: 
+Llegan solicitudes de pago (productores) desde múltiples tiendas en línea (simuladas  con hilos). El motor debe encolarlas y procesarlas con un pool de  workers (consumidores) que realizan: validación antifraude, cálculo de comisión,  llamada al gateway externo simulado. 
+Requisitos: 
+• Cola thread-safe queue.Queue con capacidad máxima de 20 solicitudes. • N=3 workers (hilos). Cada worker toma una solicitud, la procesa (simular  tiempo random.uniform(0.2, 0.8)), y actualiza el estado del pago en un  repositorio compartido (debe ser thread-safe). 
+• El productor genera 15 solicitudes de pago (cada una  
+con merchant_id, amount, currency, method_type). 
+• Al terminar, el sistema debe esperar a que se procesen todas. 
+Tareas: 
+1. Cree una clase PaymentRequest (DTO). 
+2. Extienda BalanceRepository para que sea thread-safe con threading.Lock (o  use collections.defaultdict con lock). 
+3. Implemente PaymentWorker (hereda de Thread) que consume de la cola. 4. En el main, inicie productores y workers, y muestre la salida en orden (no necesariamente secuencial, pero sí eventualmente consistente). 
+Ejemplo de salida esperada: 
+text 
+[Productor 1] Encolando pago de merchant 101 por 50.00 USD 
+[Worker A] Procesando pago 1: merchant 101, método tarjeta... Comisión 2.5 USD [Worker A] Pago completado. Nuevo saldo de merchant 101: 47.50 USD [Productor 2] Encolando pago de merchant 102 por 120.00 EUR 
+Contexto: 
+La configuración de tasas de cambio (PaymentConfig) es leída frecuentemente por  los procesadores de pago (lectores) y actualizada periódicamente por un servicio  externo (escritor). Se requiere permitir lectura concurrente pero exclusión mutua  en escritura. Además, para evitar que los escritores mueran de inanición, debe dar  prioridad a los escritores (cuando un escritor espera, no entren nuevos lectores). 
+Requisitos: 
+• Implemente una clase ReadWriteLock con prioridad a escritores usando threading.Condition. 
+• Modifique el PaymentConfig para que use este lock en los métodos get_rate (lectura) y update_rates (escritura). 
+• Simule 10 lectores (cada uno consulta la tasa 5 veces) y 2 escritores (cada uno  actualiza las tasas 3 veces, con time.sleep(0.5) entre escrituras). • Muestre cuándo un lector adquiere/release lectura y cuándo un escritor escribe. 
+Tareas: 
+1. Escriba la clase ReadWriteLock con  
+métodos acquire_read, release_read, acquire_write, release_write. 2. Integre en PaymentConfig. 
+3. Genere un script de prueba que demuestre la exclusión y la prioridad. 
+Contexto: 
+Al final del día, el sistema debe liquidar pagos internacionales en diferentes monedas.  Hay 3 procesos (hilos) que convierten montos de EUR, GBP y JPY a USD. La  liquidación consolidada solo puede calcularse cuando los tres procesos han  terminado su conversión. Use una barrera. 
+Requisitos: 
+• Cree 3 hilos, cada uno con una lista de montos en su moneda. Cada hilo  convierte a USD usando la tasa actual (simular time.sleep aleatorio). • Una vez que todos terminan, el hilo principal (o uno de ellos) imprime el total  en USD. 
+• Utilice threading.Barrier(3).
