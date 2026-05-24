@@ -1,65 +1,79 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-
+from app.presentation.schemas.auth import (
+    RegisterRequest,
+    LoginRequest,
+    TokenResponse,
+    UserResponse
+)
 from app.application.services.auth_service import AuthService
-from app.application.services.jwt_service import JwtService
-from app.domain.entities.user import User
-from app.domain.exceptions import EmailAlreadyRegisteredError, InvalidCredentialsError
-from app.domain.value_objects.password import PlainPassword
-from app.presentation.deps import get_auth_service, get_current_user, get_db, get_jwt_service, http_error_from_domain
-from app.presentation.schemas.auth import LoginRequest, MeResponse, RegisterRequest, RegisterResponse, TokenResponse
+from app.application.services.jwt_service import JWTService
+from app.infrastructure.repositories.user_repository_sqlalchemy import UserRepositorySQLAlchemy
+from app.infrastructure.security.bcrypt_hasher import BcryptHasher
+from app.domain.exceptions import (
+    UserAlreadyExistsException,
+    InvalidCredentialsException,
+    UserNotFoundException
+)
+from app.presentation.deps import get_auth_service, get_jwt_service
 
-router = APIRouter(tags=["auth"])
+router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
-
-@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
-def register(
-    body: RegisterRequest,
-    db: Session = Depends(get_db),
-    auth: AuthService = Depends(get_auth_service),
-) -> RegisterResponse:
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(
+    request: RegisterRequest,
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """
+    Ejercicio 1: Registro de nuevo usuario
+    
+    - Valida email y contraseña
+    - Hash seguro de contraseña con bcrypt
+    - Retorna usuario creado con ID
+    """
     try:
-        PlainPassword(body.password)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    try:
-        user = auth.register(str(body.email), body.password)
-        db.commit()
-    except ValueError as e:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    except EmailAlreadyRegisteredError as e:
-        db.rollback()
-        raise http_error_from_domain(e) from e
-    except Exception:
-        db.rollback()
-        raise
-    assert user.id is not None
-    return RegisterResponse(user_id=user.id)
-
+        user = await auth_service.register(
+            email=request.email,
+            password=request.password,
+            full_name=request.full_name
+        )
+        return UserResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            is_active=user.is_active
+        )
+    except UserAlreadyExistsException as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e)
+        )
 
 @router.post("/login", response_model=TokenResponse)
-def login(
-    body: LoginRequest,
-    auth: AuthService = Depends(get_auth_service),
-    jwt_service: JwtService = Depends(get_jwt_service),
-) -> TokenResponse:
+async def login(
+    request: LoginRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+    jwt_service: JWTService = Depends(get_jwt_service)
+):
+    """
+    Ejercicio 1: Autenticación y generación de JWT
+    
+    - Valida credenciales
+    - Genera token JWT con expiración de 24 horas
+    """
     try:
-        PlainPassword(body.password)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    try:
-        user = auth.authenticate(str(body.email), body.password)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    except InvalidCredentialsError as e:
-        raise http_error_from_domain(e) from e
-    assert user.id is not None
-    token = jwt_service.create_access_token(user.id)
-    return TokenResponse(access_token=token)
-
-
-@router.get("/me", response_model=MeResponse)
-def me(current: User = Depends(get_current_user)) -> MeResponse:
-    assert current.id is not None
-    return MeResponse(user_id=current.id, email=current.email.value)
+        user = await auth_service.authenticate(
+            email=request.email,
+            password=request.password
+        )
+        token = jwt_service.create_token(user.id, user.email)
+        return TokenResponse(
+            access_token=token,
+            user_id=user.id,
+            email=user.email
+        )
+    except (UserNotFoundException, InvalidCredentialsException) as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales inválidas",
+            headers={"WWW-Authenticate": "Bearer"}
+        )

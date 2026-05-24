@@ -1,15 +1,26 @@
 import re
-from dataclasses import dataclass
+from app.domain.exceptions import InvalidEmailException
 
-_EMAIL_RE = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
-
-
-@dataclass(frozen=True, slots=True)
 class Email:
-    value: str
-
-    def __post_init__(self) -> None:
-        v = (self.value or "").strip().lower()
-        if not v or not _EMAIL_RE.match(v):
-            raise ValueError("El email no tiene un formato válido.")
-        object.__setattr__(self, "value", v)
+    """Value Object para Email"""
+    
+    def __init__(self, value: str):
+        if not self._is_valid(value):
+            raise InvalidEmailException(f"Email inválido: {value}")
+        self.value = value.lower()
+    
+    @staticmethod
+    def _is_valid(email: str) -> bool:
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
+    
+    def __str__(self) -> str:
+        return self.value
+    
+    def __eq__(self, other) -> bool:
+        if isinstance(other, Email):
+            return self.value == other.value
+        return False
+    
+    def __hash__(self) -> int:
+        return hash(self.value)

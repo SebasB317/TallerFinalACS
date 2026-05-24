@@ -1,34 +1,56 @@
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-
-from app.application.analysis_config import AnalysisRuntimeConfig
+from fastapi import FastAPI, Header, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.infrastructure.concurrency.text_work_queue_adapter import get_shared_text_queue
-from app.infrastructure.database.session import init_db
-from app.infrastructure.workers.text_worker import configure_worker_analysis, process_text_job
-from app.infrastructure.workers.worker_pool import WorkerPool
-from app.presentation.api.routers import analysis, auth, jobs
+from app.infrastructure.database.base import engine, Base
+from app.presentation.api.routers import auth, payment, metrics
 
+# Crear tablas
+Base.metadata.create_all(bind=engine)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()
-    configure_worker_analysis(AnalysisRuntimeConfig.from_settings(settings))
-    queue = get_shared_text_queue()
-    pool = WorkerPool(settings.worker_count, queue, process_text_job)
-    pool.start()
-    app.state.worker_pool = pool
-    yield
-    pool.stop()
+# Crear aplicación
+app = FastAPI(
+    title=settings.API_TITLE,
+    description=settings.API_DESCRIPTION,
+    version=settings.API_VERSION
+)
 
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-app = FastAPI(title="Taller Final — Sistema de análisis", lifespan=lifespan)
+# Incluir routers
 app.include_router(auth.router)
-app.include_router(analysis.router)
-app.include_router(jobs.router)
+app.include_router(payment.router)
+app.include_router(metrics.router)
 
+@app.get("/")
+async def root():
+    """Endpoint raíz"""
+    return {
+        "message": "Bienvenido a Taller Final - Sistema Distribuido",
+        "version": settings.API_VERSION,
+        "endpoints": {
+            "auth": "/api/v1/auth/register, /api/v1/auth/login",
+            "payments": "/api/v1/payments/",
+            "admin": "/api/v1/admin/metrics"
+        }
+    }
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+@app.get("/docs")
+async def swagger_ui():
+    """Documentación Swagger"""
+    return {"message": "Ir a /docs para documentación interactiva"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )

@@ -1,7 +1,14 @@
-from typing import Protocol
+from abc import ABC, abstractmethod
 
-
-class PasswordHasher(Protocol):
-    def hash(self, plain: str) -> str: ...
-
-    def verify(self, plain: str, hashed: str) -> bool: ...
+class PasswordHasher(ABC):
+    """Puerto para hash de contraseñas"""
+    
+    @abstractmethod
+    def hash(self, password: str) -> str:
+        """Hash de contraseña"""
+        pass
+    
+    @abstractmethod
+    def verify(self, password: str, hashed_password: str) -> bool:
+        """Verificar contraseña"""
+        pass

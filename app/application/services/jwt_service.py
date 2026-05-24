@@ -1,38 +1,43 @@
-from datetime import datetime, timedelta, timezone
-from typing import Any
-
-from jose import JWTError, jwt
-
+from datetime import datetime, timedelta
+from typing import Dict, Optional
+import jwt
 from app.config import settings
 
-
-class JwtService:
+class JWTService:
+    """Servicio de JWT - Capa de Aplicación"""
+    
     def __init__(
         self,
-        secret: str | None = None,
-        algorithm: str | None = None,
-        expire_hours: int | None = None,
-    ) -> None:
-        self._secret = secret or settings.secret_key
-        self._algorithm = algorithm or settings.algorithm
-        self._expire_hours = expire_hours or settings.access_token_expire_hours
-
-    def create_access_token(self, subject_user_id: int) -> str:
-        now = datetime.now(timezone.utc)
-        expire = now + timedelta(hours=self._expire_hours)
-        payload: dict[str, Any] = {
-            "sub": str(subject_user_id),
-            "iat": now,
-            "exp": expire,
+        secret_key: str = settings.SECRET_KEY,
+        algorithm: str = "HS256",
+        expiration_hours: int = 24
+    ):
+        self.secret_key = secret_key
+        self.algorithm = algorithm
+        self.expiration_hours = expiration_hours
+    
+    def create_token(self, user_id: str, email: str) -> str:
+        """Crear JWT token"""
+        payload = {
+            "sub": user_id,
+            "email": email,
+            "exp": datetime.utcnow() + timedelta(hours=self.expiration_hours),
+            "iat": datetime.utcnow()
         }
-        return jwt.encode(payload, self._secret, algorithm=self._algorithm)
-
-    def decode_subject_user_id(self, token: str) -> int:
+        token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
+        return token
+    
+    def verify_token(self, token: str) -> Dict:
+        """Verificar y decodificar JWT token"""
         try:
-            payload = jwt.decode(token, self._secret, algorithms=[self._algorithm])
-            sub = payload.get("sub")
-            if sub is None:
-                raise ValueError("Token sin subject")
-            return int(sub)
-        except (JWTError, ValueError) as e:
-            raise ValueError("Token inválido o expirado") from e
+            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            return payload
+        except jwt.ExpiredSignatureError:
+            raise ValueError("Token expirado")
+        except jwt.InvalidTokenError:
+            raise ValueError("Token inválido")
+    
+    def get_user_id_from_token(self, token: str) -> str:
+        """Extraer user_id del token"""
+        payload = self.verify_token(token)
+        return payload.get("sub")

@@ -1,91 +1,90 @@
-from collections.abc import Generator
-
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
-
+from app.infrastructure.database.session import get_db
 from app.application.services.auth_service import AuthService
-from app.application.services.job_query_service import JobQueryService
-from app.application.services.job_service import JobService
-from app.application.services.jwt_service import JwtService
-from app.domain.entities.user import User
-from app.domain.exceptions import EmailAlreadyRegisteredError, InvalidCredentialsError
-from app.config import settings
-from app.infrastructure.concurrency.text_work_queue_adapter import ThreadSafeTextWorkQueue
-from app.infrastructure.database.session import get_session
-from app.infrastructure.repositories.job_repository_sqlalchemy import SqlAlchemyJobRepository
-from app.infrastructure.repositories.user_repository_sqlalchemy import SqlAlchemyUserRepository
-from app.infrastructure.security.bcrypt_hasher import BcryptPasswordHasher
+from app.application.services.jwt_service import JWTService
+from app.application.services.payment_service import PaymentService
+from app.infrastructure.repositories.user_repository_sqlalchemy import UserRepositorySQLAlchemy
+from app.infrastructure.repositories.payment_repository_sqlalchemy import PaymentRepositorySQLAlchemy
+from app.infrastructure.security.bcrypt_hasher import BcryptHasher
+from app.domain.ports.metrics_collector import MetricsCollector
+from app.infrastructure.concurrency.metrics_collector import InMemoryMetricsCollector
 
-security = HTTPBearer()
+# Instancia global de métricas
+_metrics_collector: MetricsCollector = InMemoryMetricsCollector()
 
-_work_queue_adapter: ThreadSafeTextWorkQueue | None = None
+def get_metrics_collector() -> MetricsCollector:
+    """Obtener recolector de métricas global"""
+    return _metrics_collector
 
+def get_password_hasher() -> BcryptHasher:
+    """Obtener hasher de contraseñas"""
+    return BcryptHasher()
 
-def get_job_work_queue() -> ThreadSafeTextWorkQueue:
-    global _work_queue_adapter
-    if _work_queue_adapter is None:
-        _work_queue_adapter = ThreadSafeTextWorkQueue()
-    return _work_queue_adapter
+def get_jwt_service() -> JWTService:
+    """Obtener servicio de JWT"""
+    return JWTService()
 
-
-def get_db() -> Generator[Session, None, None]:
-    yield from get_session()
-
-
-def get_jwt_service() -> JwtService:
-    return JwtService()
-
-
-def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
-    return AuthService(SqlAlchemyUserRepository(db), BcryptPasswordHasher())
-
-
-def get_job_query_service(db: Session = Depends(get_db)) -> JobQueryService:
-    return JobQueryService(SqlAlchemyJobRepository(db))
-
-
-def get_job_service(
+async def get_auth_service(
     db: Session = Depends(get_db),
-    queue: ThreadSafeTextWorkQueue = Depends(get_job_work_queue),
-) -> JobService:
-    return JobService(
-        SqlAlchemyJobRepository(db),
-        queue,
-        max_texts_per_job=settings.max_texts_per_job,
-    )
+    password_hasher = Depends(get_password_hasher),
+    metrics = Depends(get_metrics_collector)
+) -> AuthService:
+    """Obtener servicio de autenticación"""
+    user_repo = UserRepositorySQLAlchemy(db)
+    return AuthService(user_repo, password_hasher, metrics)
 
-
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+async def get_payment_service(
     db: Session = Depends(get_db),
-    jwt_service: JwtService = Depends(get_jwt_service),
-) -> User:
+    metrics = Depends(get_metrics_collector)
+) -> PaymentService:
+    """Obtener servicio de pagos"""
+    payment_repo = PaymentRepositorySQLAlchemy(db)
+    return PaymentService(payment_repo, metrics)
+
+async def get_current_user(
+    authorization: str = None,
+    jwt_service: JWTService = Depends(get_jwt_service),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """
+    Obtener usuario actual desde el token JWT
+    """
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No autorizado",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
     try:
-        uid = jwt_service.decode_subject_user_id(credentials.credentials)
-    except ValueError:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Esquema de autenticación inválido"
+            )
+        
+        user_id = jwt_service.get_user_id_from_token(token)
+        user = await auth_service.get_user(user_id)
+        return user
+        
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token inválido o expirado",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"}
         )
-    repo = SqlAlchemyUserRepository(db)
-    user = repo.get_by_id(uid)
-    if user is None:
+
+async def verify_admin(current_user = Depends(get_current_user)):
+    """
+    Verificar que el usuario sea administrador
+    (Para esta demo, verificar por email específico)
+    """
+    admin_emails = ["admin@taller.local", "administrador@taller.local"]
+    if current_user.email.lower() not in admin_emails:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario no encontrado",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo administradores pueden acceder a este recurso"
         )
-    return user
-
-
-def http_error_from_domain(exc: Exception) -> HTTPException:
-    if isinstance(exc, EmailAlreadyRegisteredError):
-        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-    if isinstance(exc, InvalidCredentialsError):
-        return HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(exc),
-        )
-    raise exc
+    return current_user

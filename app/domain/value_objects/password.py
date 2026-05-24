@@ -1,18 +1,30 @@
 import re
-from dataclasses import dataclass
+from app.domain.exceptions import InvalidPasswordException
 
-
-@dataclass(frozen=True, slots=True)
-class PlainPassword:
-    """Contraseña en claro solo para validación y hashing; no persistir."""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        p = self.value or ""
-        if len(p) < 8:
-            raise ValueError("La contraseña debe tener al menos 8 caracteres.")
-        if not re.search(r"[A-Z]", p):
-            raise ValueError("La contraseña debe incluir al menos una mayúscula.")
-        if not re.search(r"\d", p):
-            raise ValueError("La contraseña debe incluir al menos un número.")
+class Password:
+    """Value Object para Contraseña"""
+    
+    MIN_LENGTH = 8
+    
+    def __init__(self, value: str):
+        if not self._is_valid(value):
+            raise InvalidPasswordException(
+                f"Contraseña debe tener al menos {self.MIN_LENGTH} caracteres, "
+                "una mayúscula y un número"
+            )
+        self.value = value
+    
+    @staticmethod
+    def _is_valid(password: str) -> bool:
+        if len(password) < Password.MIN_LENGTH:
+            return False
+        if not re.search(r'[A-Z]', password):
+            return False
+        if not re.search(r'\d', password):
+            return False
+        return True
+    
+    def __eq__(self, other) -> bool:
+        if isinstance(other, Password):
+            return self.value == other.value
+        return False

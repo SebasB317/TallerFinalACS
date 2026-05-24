@@ -1,30 +1,43 @@
-class DomainError(Exception):
-    """Error de reglas de negocio en el dominio."""
-
-
-class EmailAlreadyRegisteredError(DomainError):
+class DomainException(Exception):
+    """Excepción base del dominio"""
     pass
 
-
-class InvalidCredentialsError(DomainError):
+class InvalidEmailException(DomainException):
+    """Email inválido"""
     pass
 
-
-class UserNotFoundError(DomainError):
+class InvalidPasswordException(DomainException):
+    """Contraseña inválida"""
     pass
 
+class UserAlreadyExistsException(DomainException):
+    """Usuario ya existe"""
+    pass
 
-class TooManyTextsInBatchError(DomainError):
-    """El lote supera el máximo permitido (100 textos)."""
+class UserNotFoundException(DomainException):
+    """Usuario no encontrado"""
+    pass
 
+class InvalidCredentialsException(DomainException):
+    """Credenciales inválidas"""
+    pass
 
-class EmptyJobBatchError(DomainError):
-    """No se puede crear un trabajo sin textos."""
+class TokenExpiredException(DomainException):
+    """Token expirado"""
+    pass
 
+class InvalidTokenException(DomainException):
+    """Token inválido"""
+    pass
 
-class JobNotFoundError(DomainError):
-    """Trabajo inexistente o sin permiso para verlo."""
+class PaymentValidationException(DomainException):
+    """Error en validación de pago"""
+    pass
 
+class PaymentProcessingException(DomainException):
+    """Error al procesar pago"""
+    pass
 
-class JobNotReadyForReportError(DomainError):
-    """El reporte agregado solo aplica cuando el trabajo está `completed`."""
+class UnauthorizedException(DomainException):
+    """No autorizado"""
+    pass
