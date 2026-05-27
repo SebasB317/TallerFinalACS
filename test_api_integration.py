@@ -142,11 +142,11 @@ except Exception as e:
 
 print("\n✅ EJERCICIO 7 COMPLETADO\n")
 
-# TEST 3: EJERCICIO 6 - PAGOS
-print("█ EJERCICIO 6: PAGOS")
+# TEST 3: EJERCICIO 9 - PAGOS INTERNACIONALES
+print("█ EJERCICIO 9: PAGOS INTERNACIONALES")
 print("-"*60)
 
-print("\n[6.1] Procesando pago...")
+print("\n[9.1] Procesando pago en USD (Card)...")
 try:
     resp = client.post(
         f"{BASE_URL}/api/v1/payments/",
@@ -174,8 +174,64 @@ try:
 except Exception as e:
     print(f"❌ Excepción: {e}")
 
-print("\n✅ EJERCICIO 6 COMPLETADO\n")
+print("\n✅ EJERCICIO 9 COMPLETADO\n")
+
+print("█ EJERCICIO 9: PRUEBAS ADICIONALES DE MONEDAS")
+print("-"*60)
+
+print("\n[9.2] Procesando pago en EUR (Card)...")
+try:
+    resp = client.post(
+        f"{BASE_URL}/api/v1/payments/",
+        json={
+            "amount": 150.50,
+            "currency": "EUR",
+            "merchant_id": "MERCHANT_002",
+            "method": "card"
+        },
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    if resp.status_code in [200, 201]:
+        payment = resp.json()
+        print(f"✅ Pago en EUR procesado:")
+        print(f"   ID: {payment.get('id')}")
+        print(f"   Monto: {payment.get('amount')} {payment.get('currency')}")
+        print(f"   Comisión: {payment.get('commission')}")
+        print(f"   Estado: {payment.get('status')}")
+    else:
+        print(f"❌ Error: {resp.status_code}")
+        print(f"   {resp.json()}")
+except Exception as e:
+    print(f"❌ Excepción: {e}")
+
+print("\n[9.3] Procesando pago en GBP (Bank Transfer)...")
+try:
+    resp = client.post(
+        f"{BASE_URL}/api/v1/payments/",
+        json={
+            "amount": 200.00,
+            "currency": "GBP",
+            "merchant_id": "MERCHANT_003",
+            "method": "bank_transfer"
+        },
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    if resp.status_code in [200, 201]:
+        payment = resp.json()
+        print(f"✅ Pago en GBP procesado:")
+        print(f"   ID: {payment.get('id')}")
+        print(f"   Monto: {payment.get('amount')} {payment.get('currency')}")
+        print(f"   Comisión: {payment.get('commission')}")
+        print(f"   Estado: {payment.get('status')}")
+    else:
+        print(f"❌ Error: {resp.status_code}")
+        print(f"   {resp.json()}")
+except Exception as e:
+    print(f"❌ Excepción: {e}")
+
+print("\n✅ PRUEBAS ADICIONALES COMPLETADAS\n")
 
 print("="*60)
 print("✅ TODOS LOS TESTS DE INTEGRACIÓN COMPLETADOS EXITOSAMENTE")
+print("3 EJERCICIOS PRINCIPALES + PRUEBAS ADICIONALES DE MONEDAS")
 print("="*60 + "\n")
