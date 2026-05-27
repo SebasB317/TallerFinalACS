@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from app.infrastructure.database.session import get_db
 from app.application.services.auth_service import AuthService
@@ -43,7 +43,7 @@ async def get_payment_service(
     return PaymentService(payment_repo, metrics)
 
 async def get_current_user(
-    authorization: str = None,
+    authorization: str = Header(None),
     jwt_service: JWTService = Depends(get_jwt_service),
     auth_service: AuthService = Depends(get_auth_service)
 ):
@@ -81,7 +81,7 @@ async def verify_admin(current_user = Depends(get_current_user)):
     Verificar que el usuario sea administrador
     (Para esta demo, verificar por email específico)
     """
-    admin_emails = ["admin@taller.local", "administrador@taller.local"]
+    admin_emails = ["admin@example.com", "administrador@example.com"]
     if current_user.email.lower() not in admin_emails:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
