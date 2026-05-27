@@ -1,0 +1,3 @@
+-- La base de datos taller_final ya es creada por POSTGRES_DB en docker-compose.yml
+-- Este archivo está aquí para futuras migraciones si es necesario
+-- Por ahora, la aplicación crea las tablas automáticamente al iniciar
