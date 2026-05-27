@@ -1,8 +1,8 @@
-# Taller Final - Sistema Distribuido con Arquitectura Limpia
+# Taller Final - Arquitectura Cliente Servidor con Arquitectura Limpia
 
 ## 📋 Descripción General
 
-Sistema distribuido concurrente que implementa los ejercicios 1, 7 y 9 del taller, con énfasis en:
+Arquitectura Cliente Servidor concurrente que implementa los ejercicios 1, 7 y 9 del taller, con énfasis en:
 
 - **Ejercicio 1**: Gestión de usuarios y autenticación segura con JWT
 - **Ejercicio 7**: Dashboard administrativo con métricas de concurrencia
@@ -471,7 +471,7 @@ class AuthService:
 
 ## 👨‍💻 Autor
 
-Taller Final - Sistema Distribuido
+Taller Final - Arquitectura Cliente Servidor
 Implementado con Arquitectura Limpia y Docker
 
 ## 📄 Licencia

@@ -32,7 +32,7 @@ app.include_router(metrics.router)
 async def root():
     """Endpoint raíz"""
     return {
-        "message": "Bienvenido a Taller Final - Sistema Distribuido",
+        "message": "Bienvenido a Taller Final - Arquitectura Cliente Servidor",
         "version": settings.API_VERSION,
         "endpoints": {
             "auth": "/api/v1/auth/register, /api/v1/auth/login",

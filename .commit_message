@@ -1,0 +1,44 @@
+Implementar Taller Final: Ejercicios 1, 7 y 9 con Arquitectura Limpia
+
+EJERCICIOS IMPLEMENTADOS:
+- Ejercicio 1: Autenticación segura con JWT
+  * Registro con validación de email y contraseña
+  * Hash bcrypt (12 rounds)
+  * JWT con expiración 24 horas
+  * Endpoints: /api/v1/auth/register, /api/v1/auth/login
+
+- Ejercicio 7: Dashboard administrativo con métricas
+  * Recolector de métricas thread-safe
+  * RLock para sincronización
+  * Métricas: pagos procesados, tasa de éxito, usuarios
+  * Endpoint: /api/v1/admin/metrics (solo admin)
+
+- Ejercicio 9: Pagos internacionales
+  * Cola thread-safe con capacidad máxima
+  * Pool de 3 workers procesando concurrentemente
+  * Validación antifraude simulada
+  * Cálculo de comisión por método
+  * Conversión de monedas (EUR, GBP, JPY a USD)
+  * Patrón Productor-Consumidor
+
+ARQUITECTURA:
+- Arquitectura Limpia en 4 capas (Domain, Application, Infrastructure, Presentation)
+- Domain: Lógica pura sin dependencias externas
+- Application: Servicios de orquestación
+- Infrastructure: Implementaciones (BD, workers, seguridad)
+- Presentation: FastAPI HTTP y DTOs
+
+FEATURES:
+- PostgreSQL + SQLAlchemy ORM
+- Tests unitarios con pytest
+- Docker y docker-compose
+- Bcrypt para seguridad de contraseñas
+- JWT para autenticación stateless
+- Métricas thread-safe con RLock
+- Workers concurrentes (threading)
+- Inyección de dependencias
+
+DOCUMENTACIÓN:
+- README.md: Guía completa del sistema
+- ARQUITECTURA_LIMPIA.md: Patrones y principios aplicados
+- GUIA_RAPIDA.md: Inicio rápido y troubleshooting

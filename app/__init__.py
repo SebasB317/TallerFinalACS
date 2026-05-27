@@ -1,2 +1,2 @@
-# Taller Final - Sistema Distribuido
+# Taller Final - Arquitectura Cliente Servidor
 __version__ = "1.0.0"

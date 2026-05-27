@@ -2,7 +2,7 @@
 
 ## 🎯 Objetivo Logrado
 
-Implementación exitosa de un **Sistema Distribuido Concurrente** con **Arquitectura Limpia** que cumple con:
+Implementación exitosa de un **Arquitectura Cliente Servidor Concurrente** con **Arquitectura Limpia** que cumple con:
 - ✅ **Ejercicio 1**: Autenticación segura con JWT
 - ✅ **Ejercicio 7**: Dashboard administrativo con métricas  
 - ✅ **Ejercicio 9**: Sistema de pagos internacionales
